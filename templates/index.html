@@ -1207,7 +1207,7 @@
       btn.disabled = false;
     });
 
-    // ── Form Submit → Predict ────────────────────────────────
+    // ── Form Submit → Predict (Local Flask Model) ────────────
     document.getElementById('pred-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('predict-btn');
@@ -1215,44 +1215,32 @@
       err.classList.remove('visible');
       btn.classList.add('loading');
 
-      // Field names match the deployed FastAPI schema
+      // Field names match the local Flask /api/predict schema
       const payload = {
         district: document.getElementById('district').value,
-        Soil_Type: document.getElementById('soil_type').value,
+        soil_type: document.getElementById('soil_type').value,
         humidity: Number(humSlider.value),
         temperature: Number(tmpSlider.value),
-        crop: document.getElementById('crop_type').value,
+        crop_type: document.getElementById('crop_type').value,
       };
 
       try {
-        const r = await fetch(`${BASE_URL}/predict`, {
+        // Call the LOCAL Flask model running on app.py
+        const r = await fetch('/api/predict', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
         const d = await r.json();
-        if (!r.ok) {
-          err.textContent = '❌ ' + (d.detail || JSON.stringify(d));
+        if (d.error) {
+          err.textContent = '❌ ' + d.error;
           err.classList.add('visible');
         } else {
-          // Map FastAPI response to showResult format
-          const result = {
-            predicted_yield: d.predicted_yield,
-            quality_label: d.quality_label,
-            quality_emoji: d.quality_emoji,
-            quality_color: d.quality_label === 'Excellent' ? '#22c55e'
-              : d.quality_label === 'Good' ? '#84cc16'
-                : d.quality_label === 'Average' ? '#f59e0b' : '#ef4444',
-            confidence_low: d.confidence_low,
-            confidence_high: d.confidence_high,
-            inputs: {
-              soil_nutrients: d.inputs_used || {}
-            }
-          };
-          showResult(result);
+          // Flask response maps directly — no conversion needed
+          showResult(d);
         }
       } catch (ex) {
-        err.textContent = '❌ Could not connect to the prediction API at ' + BASE_URL + '. Please try again.';
+        err.textContent = '❌ Could not connect to the local model. Make sure app.py is running on port 5000.';
         err.classList.add('visible');
       }
       btn.classList.remove('loading');
