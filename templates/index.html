@@ -1110,42 +1110,71 @@
     // ── API Base URL (deployed Render API) ──────────────────
     const BASE_URL = 'https://crop-yielding-api.onrender.com';
 
-    // ── Load metadata ────────────────────────────────────────
+    // ── Hardcoded fallback data (from model_metadata.json) ──
+    const FALLBACK_META = {
+      model_name: "Random Forest",
+      rf_r2: 0.9857, rf_mae: 0.4496, rf_rmse: 1.2427,
+      cv_mean_r2: 0.9791, train_size: 1792,
+      districts: [
+        "Ariyalur", "Chengalpattu", "Coimbatore", "Cuddalore", "Dharmapuri",
+        "Dindigul", "Erode", "Kallakurichi", "Kanchipuram", "Kanniyakumari",
+        "Karur", "Krishnagiri", "Madurai", "Mayiladuthurai", "Nagapattinam",
+        "Namakkal", "Perambalur", "Pudukkottai", "Ramanathapuram", "Ranipet",
+        "Salem", "Svaganga", "Tenkasi", "Thanjavur", "The Nilgiris", "Theni",
+        "Thiruvallur", "Thiruvarur", "Tiruchirappalli", "Tirunelveli",
+        "Tirupathur", "Tuticorin", "Vellore", "Villupuram", "Virudhunagar"
+      ],
+      crop_types: ["Coconut", "Groundnut", "Guava", "Maize", "Mango", "Millet", "Rice", "Sugarcane"],
+      soil_types: ["Alluvial Soil", "Black Soil", "Clay", "Laterite Soil", "Loamy", "Peaty Soil", "Red Soil", "Sandy"]
+    };
+
+    // ── Populate dropdowns helper ─────────────────────────────
+    function populateDropdown(selectId, items) {
+      const select = document.getElementById(selectId);
+      if (!select || !items || !items.length) return;
+      const defaultOpt = select.options[0];
+      select.innerHTML = '';
+      select.appendChild(defaultOpt);
+      items.forEach(item => {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = item;
+        select.appendChild(opt);
+      });
+    }
+
+    // ── Apply metadata to UI ──────────────────────────────────
+    function applyMeta(m) {
+      document.getElementById('stat-r2').textContent = (m.rf_r2 * 100).toFixed(1) + '%';
+      document.getElementById('meta-algo').textContent = m.model_name || 'Random Forest';
+      document.getElementById('meta-r2').textContent = (m.rf_r2 * 100).toFixed(2) + '%';
+      document.getElementById('meta-mae').textContent = m.rf_mae.toFixed(4) + ' T/Ha';
+      document.getElementById('meta-rmse').textContent = m.rf_rmse.toFixed(4) + ' T/Ha';
+      document.getElementById('meta-cv').textContent = m.cv_mean_r2 !== undefined ? (m.cv_mean_r2 * 100).toFixed(2) + '%' : '—';
+      document.getElementById('meta-train').textContent = m.train_size || '—';
+      document.getElementById('stat-districts').textContent = (m.districts || []).length;
+      document.getElementById('stat-crops').textContent = (m.crop_types || []).length;
+      populateDropdown('district', m.districts);
+      populateDropdown('soil_type', m.soil_types);
+      populateDropdown('crop_type', m.crop_types);
+    }
+
+    // ── Load metadata: local Flask → Render API → hardcoded ──
     async function loadMetadata() {
+      // 1️⃣ Try local Flask API first (works when app.py is running)
       try {
-        const r = await fetch(`${BASE_URL}/metadata`);
-        if (!r.ok) return;
-        const m = await r.json();
-        document.getElementById('stat-r2').textContent = (m.rf_r2 * 100).toFixed(1) + '%';
-        document.getElementById('meta-algo').textContent = m.model_name || 'Random Forest';
-        document.getElementById('meta-r2').textContent = (m.rf_r2 !== undefined ? (m.rf_r2 * 100).toFixed(2) + '%' : '—');
-        document.getElementById('meta-mae').textContent = m.rf_mae !== undefined ? m.rf_mae.toFixed(4) + ' T/Ha' : '—';
-        document.getElementById('meta-rmse').textContent = m.rf_rmse !== undefined ? m.rf_rmse.toFixed(4) + ' T/Ha' : '—';
-        document.getElementById('meta-cv').textContent = m.cv_mean_r2 !== undefined ? (m.cv_mean_r2 * 100).toFixed(2) + '%' : '—';
-        document.getElementById('meta-train').textContent = m.train_size || '—';
-        document.getElementById('stat-districts').textContent = (m.districts || []).length;
-        document.getElementById('stat-crops').textContent = (m.crop_types || []).length;
+        const r = await fetch('/api/metadata', { signal: AbortSignal.timeout(3000) });
+        if (r.ok) { applyMeta(await r.json()); return; }
+      } catch (_) { }
 
-        // Dynamically populate dropdowns from dataset metadata
-        function populateDropdown(selectId, items) {
-          const select = document.getElementById(selectId);
-          if (!select || !items) return;
-          // Keep the first default option
-          const defaultOpt = select.options[0];
-          select.innerHTML = '';
-          select.appendChild(defaultOpt);
-          items.forEach(item => {
-            const opt = document.createElement('option');
-            opt.value = opt.textContent = item;
-            select.appendChild(opt);
-          });
-        }
+      // 2️⃣ Try the Render deployed API
+      try {
+        const r = await fetch(`${BASE_URL}/metadata`, { signal: AbortSignal.timeout(8000) });
+        if (r.ok) { applyMeta(await r.json()); return; }
+      } catch (_) { }
 
-        populateDropdown('district', m.districts);
-        populateDropdown('soil_type', m.soil_types);
-        populateDropdown('crop_type', m.crop_types);
-
-      } catch (e) { console.warn('Metadata fetch failed', e); }
+      // 3️⃣ Always works — use hardcoded fallback from model_metadata.json
+      console.warn('Using hardcoded fallback metadata.');
+      applyMeta(FALLBACK_META);
     }
     loadMetadata();
 
